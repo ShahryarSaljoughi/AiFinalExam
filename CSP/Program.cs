@@ -9,7 +9,7 @@ namespace CSP
         static async Task Main(string[] args)
         {
             var engine = new Engine();
-            await engine.Start();
+            await engine.StartAsync();
         }
     }
 }

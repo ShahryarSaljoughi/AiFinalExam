@@ -9,6 +9,7 @@ namespace CSP.Entities
         public NodeState Clone()
         {
             var result = new NodeState();
+            result.Variables = new List<Variable>();
             foreach (var variable in Variables)
             {
                 result.Variables.Add(variable.Clone());

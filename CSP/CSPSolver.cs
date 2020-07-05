@@ -24,66 +24,9 @@ namespace CSP
             PopulateDomainValues(visibility);
             InitializeVariables(visibility);
             PopulateVariableCandidates(visibility);
-            PopulateConstraints(visibility, communications, neededSensorsForEachTargetNo);
+            PopulateConstraints(visibility, communications);
         }
 
-        private void PopulateDomainValues(int[,] visibility)
-        {
-            foreach (var i in Enumerable.Range(0, TargetNo))
-            {
-                DomainValues.Add(new DomainValue(){Id = i, Value = $"t{i}"});
-            }
-        }
-
-        private void PopulateConstraints(int[,] visibility, int[,] communications, in int neededSensorsForEachTargetNo)
-        {
-            // each sensor has at least one candidate value, or is already assigned.
-            var rule1 = new Constraint((variables) => variables.All(variable => variable.IsAssigned || variable.Candidates.Any()));
-            
-            // no target is being tracked by more than K sensors
-            var rule2 = new Constraint((variables) =>
-            {
-                var collaboratingSensorGroups =
-                    variables.Where(sensor => sensor.IsAssigned).GroupBy(sensor => sensor.AssignedValue);
-                var result = collaboratingSensorGroups.All(group => group.Count() <= NeededSensorsForEachTargetNo);
-                return result;
-            });
-
-            // there are enough sensors for each target
-            var rule3 = new Constraint((variables) =>
-            {
-                return DomainValues.All(target =>
-                {
-                    var sensorsAlreadyTrackingTargetNo =
-                        variables.Count(sensor => sensor.AssignedValue == target.Value);
-                    var sensorsRemainedForTargetNo = variables.Count(sensor =>
-                        !sensor.IsAssigned && sensor.Candidates.Select(c => c.Value).Contains(target.Value));
-                    return sensorsRemainedForTargetNo + sensorsRemainedForTargetNo >= NeededSensorsForEachTargetNo;
-                });
-            });
-            
-
-            this.Constraints.AddRange(new []{rule1, rule2, rule3});
-        }
-
-        private void PopulateVariableCandidates(int[,] visibility)
-        {
-            foreach (var sensor in Variables)
-            {
-                sensor.Candidates = DomainValues.Where(domainValue => visibility[sensor.Id, domainValue.Id] == 1)
-                    .ToList();
-            }
-        }
-
-        private void InitializeVariables(int[,] visibility)
-        {
-            
-            for (int i = 0; i < SensorsNo; i++)
-            {
-                var sensor = new Variable() { Name = $"s{i}", Id = i};
-                this.Variables.Add(sensor);
-            }
-        }
 
         public Result Solve()
         {
@@ -111,6 +54,7 @@ namespace CSP
                     currentState.GoBackToState(stateBeforeGoingDeeper);
                 }
             }
+
             throw new CspPathFailure();
         }
 
@@ -140,6 +84,98 @@ namespace CSP
                 .OrderByDescending(v => v.Candidates.Count())
                 // todo: Degree Heuristic
                 .First();
+        }
+
+        private void PopulateDomainValues(int[,] visibility)
+        {
+            DomainValues = new List<DomainValue>();
+            foreach (var i in Enumerable.Range(0, TargetNo))
+            {
+                DomainValues.Add(new DomainValue() {Id = i, Value = $"t{i}"});
+            }
+        }
+
+        private void PopulateConstraints(int[,] visibility, int[,] communications)
+        {
+            // each sensor has at least one candidate value, or is already assigned.
+            var rule1 = new Constraint((variables) =>
+                variables.All(variable => variable.IsAssigned || variable.Candidates.Any()));
+
+            // collaborating sensors are in each others'  access range
+            var rule2 = new Constraint((variables) =>
+            {
+                var collaboratingSensorGroups =
+                    variables.Where(sensor => sensor.IsAssigned).GroupBy(sensor => sensor.AssignedValue);
+
+                return collaboratingSensorGroups.All(group =>
+                {
+                    bool sensorsAreConnected = true;
+                    foreach (var sensor1 in group)
+                    {
+                        foreach (var sensor2 in group)
+                        {
+                            if (sensor1.Id == sensor2.Id) continue;
+                            if (communications[sensor1.Id, sensor2.Id] != 1) sensorsAreConnected = false;
+                        }
+                    }
+
+                    return sensorsAreConnected;
+                });
+            });
+
+            // no target is being tracked by more than K sensors
+            var rule3 = new Constraint((variables) =>
+            {
+                var collaboratingSensorGroups =
+                    variables.Where(sensor => sensor.IsAssigned).GroupBy(sensor => sensor.AssignedValue);
+                var result = collaboratingSensorGroups.All(group => group.Count() <= NeededSensorsForEachTargetNo);
+                return result;
+            });
+
+            // there are enough sensors for each target
+            var rule4 = new Constraint((variables) =>
+            {
+                return DomainValues.All(target =>
+                {
+                    var sensorsAlreadyTracking = variables.Where(sensor => sensor.AssignedValue == target.Value);
+                    var sensorsAlreadyTrackingTargetNo = sensorsAlreadyTracking.Count();
+                    var sensorsRemainedForTargetNo = variables.Count(sensor =>
+                    {
+                        var sensorIsConnectedToOthers = true;
+                        foreach (var sensorItem in sensorsAlreadyTracking)
+                        {
+                            if (communications[sensorItem.Id, sensor.Id] == 0) sensorIsConnectedToOthers = false;
+                        }
+
+                        if (!sensorIsConnectedToOthers) return false;
+
+                        return !sensor.IsAssigned && sensor.Candidates.Select(c => c.Value).Contains(target.Value);
+                    });
+                    return sensorsAlreadyTrackingTargetNo + sensorsRemainedForTargetNo >= NeededSensorsForEachTargetNo;
+                });
+            });
+
+            this.Constraints = new List<Constraint>();
+            this.Constraints.AddRange(new[] {rule1, rule2, rule3, rule4});
+        }
+
+        private void PopulateVariableCandidates(int[,] visibility)
+        {
+            foreach (var sensor in Variables)
+            {
+                sensor.Candidates = DomainValues.Where(domainValue => visibility[sensor.Id, domainValue.Id] == 1)
+                    .ToList();
+            }
+        }
+
+        private void InitializeVariables(int[,] visibility)
+        {
+            Variables = new List<Variable>();
+            for (int i = 0; i < SensorsNo; i++)
+            {
+                var sensor = new Variable() {Name = $"s{i}", Id = i};
+                this.Variables.Add(sensor);
+            }
         }
     }
 }

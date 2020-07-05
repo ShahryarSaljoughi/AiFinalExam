@@ -1,0 +1,7 @@
+you need dotnet core tools installed.
+
+1- navigate to AiFinalExam/CSP
+2- execute these commands:
+
+- dotnet restore
+- dotnet run

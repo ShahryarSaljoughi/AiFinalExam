@@ -7,7 +7,7 @@ namespace CSP.Interactor
 {
     public class Engine
     {
-        public async Task Start()
+        public async Task StartAsync()
         {
             int k = await FileBoundary.GetKAsync();
             int[,] visibility = await FileBoundary.ReadVisibilityMatrixAsync();
