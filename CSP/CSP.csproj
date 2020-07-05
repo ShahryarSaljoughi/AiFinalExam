@@ -14,8 +14,4 @@
     </None>
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Interactor\" />
-  </ItemGroup>
-
 </Project>
