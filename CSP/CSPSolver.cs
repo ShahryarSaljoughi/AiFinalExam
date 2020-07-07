@@ -36,7 +36,12 @@ namespace CSP
 
         private Result SolveRecursively(NodeState currentState)
         {
-            if (currentState.Variables.All(variable => variable.IsAssigned))
+            // check if done:
+            var collaboratingSensorGroups =
+                currentState.Variables.Where(v => v.IsAssigned).GroupBy(v => v.AssignedValue).ToArray();
+            var done = collaboratingSensorGroups.Length == DomainValues.Count &&
+                       collaboratingSensorGroups.All(group => group.Count() == NeededSensorsForEachTargetNo);
+            if (done)
                 return new Result() {AssignedVariables = currentState.Variables.ToDictionary(v => v.Name)};
 
             var variableToAssign = GetNextVariable(currentState);
@@ -45,6 +50,9 @@ namespace CSP
             {
                 if (!IsConsistent(currentState, variableToAssign, value)) continue;
                 variableToAssign.AssignedValue = value.Value;
+                variableToAssign.IsAssigned = true;
+                // forward checking 
+                UpdateCandidates(currentState.Variables, value);
                 try
                 {
                     return SolveRecursively(currentState);
@@ -55,7 +63,27 @@ namespace CSP
                 }
             }
 
-            throw new CspPathFailure();
+            // try going deep leaving variableToAssign unassigned!
+            variableToAssign.IsAncestorWithoutValue = true;
+            try
+            {
+                return SolveRecursively(currentState);
+            }
+            catch (CspPathFailure)
+            {
+                currentState.GoBackToState(stateBeforeGoingDeeper);
+                throw;
+            }
+        }
+
+        private void UpdateCandidates(List<Variable> currentStateVariables, DomainValue value)
+        {
+            var sensorsAlreadyTrackingTargetCount = currentStateVariables.Count(v => v.IsAssigned && v.AssignedValue == value.Value);
+            var needed = NeededSensorsForEachTargetNo - sensorsAlreadyTrackingTargetCount;
+
+            if (needed > 0) return;
+
+            Variables.ForEach(v => v.RemoveFromCandidateList(value));
         }
 
         private bool IsConsistent(NodeState currentState, Variable variableToAssign, in DomainValue value)
@@ -80,8 +108,8 @@ namespace CSP
         private Variable GetNextVariable(NodeState state)
         {
             return state.Variables
-                .Where(v => v.IsAssigned == false)
-                .OrderByDescending(v => v.Candidates.Count())
+                .Where(v => v.IsAssigned == false && !v.IsAncestorWithoutValue)
+                .OrderBy(v => v.Candidates.Count())
                 // todo: Degree Heuristic
                 .First();
         }
@@ -98,8 +126,8 @@ namespace CSP
         private void PopulateConstraints(int[,] visibility, int[,] communications)
         {
             // each sensor has at least one candidate value, or is already assigned.
-            var rule1 = new Constraint((variables) =>
-                variables.All(variable => variable.IsAssigned || variable.Candidates.Any()));
+            // var rule1 = new Constraint((variables) =>
+            //     variables.All(variable => variable.IsAssigned || variable.Candidates.Any()));
 
             // collaborating sensors are in each others'  access range
             var rule2 = new Constraint((variables) =>
@@ -137,26 +165,28 @@ namespace CSP
             {
                 return DomainValues.All(target =>
                 {
-                    var sensorsAlreadyTracking = variables.Where(sensor => sensor.AssignedValue == target.Value);
-                    var sensorsAlreadyTrackingTargetNo = sensorsAlreadyTracking.Count();
+                    var sensorsAlreadyTrackingTarget =
+                        variables.Where(sensor => sensor.AssignedValue == target.Value).ToArray();
+                    var sensorsAlreadyTrackingTargetNo = sensorsAlreadyTrackingTarget.Count();
                     var sensorsRemainedForTargetNo = variables.Count(sensor =>
                     {
-                        var sensorIsConnectedToOthers = true;
-                        foreach (var sensorItem in sensorsAlreadyTracking)
+                        if (sensor.IsAssigned) return false;
+                        if (!sensor.Candidates.Select(c => c.Value).Contains(target.Value)) return false;
+
+                        var isConnectedToAllOthers = true;
+                        foreach (var sensorItem in sensorsAlreadyTrackingTarget)
                         {
-                            if (communications[sensorItem.Id, sensor.Id] == 0) sensorIsConnectedToOthers = false;
+                            if (communications[sensorItem.Id, sensor.Id] == 0) isConnectedToAllOthers = false;
                         }
 
-                        if (!sensorIsConnectedToOthers) return false;
-
-                        return !sensor.IsAssigned && sensor.Candidates.Select(c => c.Value).Contains(target.Value);
+                        return isConnectedToAllOthers;
                     });
                     return sensorsAlreadyTrackingTargetNo + sensorsRemainedForTargetNo >= NeededSensorsForEachTargetNo;
                 });
             });
 
             this.Constraints = new List<Constraint>();
-            this.Constraints.AddRange(new[] {rule1, rule2, rule3, rule4});
+            this.Constraints.AddRange(new[] {/*rule1,*/ rule2, rule3, rule4});
         }
 
         private void PopulateVariableCandidates(int[,] visibility)

@@ -4,6 +4,9 @@ namespace CSP
 {
     public class CspPathFailure: Exception
     {
-        public override string Message => "Path Failed. You need to backtrack!";
+        public CspPathFailure(string message): base(message ?? "Path Failed. You need to backtrack!")
+        {
+            
+        }
     }
 }
