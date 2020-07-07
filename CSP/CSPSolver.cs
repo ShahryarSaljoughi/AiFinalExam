@@ -45,6 +45,7 @@ namespace CSP
                 return new Result() {AssignedVariables = currentState.Variables.ToDictionary(v => v.Name)};
 
             var variableToAssign = GetNextVariable(currentState);
+            if (variableToAssign is null) throw new CspPathFailure(currentState);
             var stateBeforeGoingDeeper = currentState.Clone();
             foreach (var value in GetValueFor(variableToAssign))
             {
@@ -111,7 +112,7 @@ namespace CSP
                 .Where(v => v.IsAssigned == false && !v.IsAncestorWithoutValue)
                 .OrderBy(v => v.Candidates.Count())
                 // todo: Degree Heuristic
-                .First();
+                .FirstOrDefault();
         }
 
         private void PopulateDomainValues(int[,] visibility)
@@ -171,6 +172,7 @@ namespace CSP
                     var sensorsRemainedForTargetNo = variables.Count(sensor =>
                     {
                         if (sensor.IsAssigned) return false;
+                        if (sensor.IsAncestorWithoutValue) return false;
                         if (!sensor.Candidates.Select(c => c.Value).Contains(target.Value)) return false;
 
                         var isConnectedToAllOthers = true;

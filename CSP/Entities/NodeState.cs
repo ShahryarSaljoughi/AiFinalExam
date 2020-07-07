@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace CSP.Entities
 {
@@ -24,6 +26,16 @@ namespace CSP.Entities
             {
                 Variables[i].GoBackToState(safeState.Variables[i]);
             }
+        }
+
+        public override string ToString()
+        {
+            return this.Variables.Any()
+                ? this.Variables.Aggregate("",
+                    (acc, v) =>
+                        acc +
+                        $"(name: {v.Name}, value: {v.AssignedValue}, isAncestorWithoutValue: {v.IsAncestorWithoutValue}, Candidates: {{{(v.Candidates.Any() ? v.Candidates.Select(c => c.Value).Aggregate((s1, s2) => $"{s1},{s2}") : string.Empty) } }} ) {Environment.NewLine}")
+                : "";
         }
     }
 }

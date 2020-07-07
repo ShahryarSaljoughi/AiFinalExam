@@ -48,7 +48,12 @@ namespace CSP
 
         public static async Task WriteBackResultAsync(Result result)
         {
-            throw new NotImplementedException();
+            var basePath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            var outputPath = Path.Combine(
+                basePath ?? throw new InvalidOperationException("problem with getting path to executable"), "Data",
+                "Output.txt");
+            await using var sw = new StreamWriter($"{outputPath}");
+            await sw.WriteAsync(result.ToString());
         }
 
         private static async Task<string> ReadFileAsync(string path)
